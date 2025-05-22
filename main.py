@@ -1,12 +1,10 @@
+import os
 import json
+import psycopg2
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-import psycopg2
-import os
-import pprint
 
 app = FastAPI()
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -14,7 +12,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
 conn = psycopg2.connect(
     dbname=os.environ["DB_NAME"],
     user=os.environ["DB_USER"],
@@ -23,7 +20,6 @@ conn = psycopg2.connect(
     port=os.environ["DB_PORT"]
 )
 cursor = conn.cursor()
-
 def parse_float(value):
     try:
         return float(value)
@@ -34,30 +30,24 @@ def parse_float(value):
 async def receber_dado(request: Request):
     raw_body = await request.body()
     body_str = raw_body.decode("utf-8")
-    json_parts = []
-    temp = ""
-    open_braces = 0
-    for char in body_str:
-        if char == '{':
-            open_braces += 1
-        elif char == '}':
-            open_braces -= 1
 
-        temp += char
+    json_parts = body_str.split("}{")
+    if len(json_parts) > 1:
+        json_parts = [json_parts[0] + "}"] + ["{" + part + "}" for part in json_parts[1:]]
 
-        if open_braces == 0 and temp.strip():
-            json_parts.append(temp.strip())
-            temp = ""
+    else:
+        json_parts = [body_str]
 
     for json_part in json_parts:
+        if not json_part.strip():
+            continue
+
         try:
             data = json.loads(json_part)
         except json.JSONDecodeError as e:
             print(f"Erro ao decodificar um dos JSONs: {e}")
             continue
-
-        pprint.pprint(data)
-
+        
         channel = data.get("channel", {})
         nome_canal = channel.get("name")
         latitude = parse_float(channel.get("latitude"))
@@ -78,7 +68,6 @@ async def receber_dado(request: Request):
             ]:
                 print("Feed ignorado por dados inválidos:", feed)
                 continue
-
             cursor.execute("""
                 INSERT INTO leituras_iot (
                     created_at,
