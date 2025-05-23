@@ -31,23 +31,20 @@ async def receber_dado(request: Request):
     raw_body = await request.body()
     body_str = raw_body.decode("utf-8")
 
-    json_parts = body_str.split("}{")
-    if len(json_parts) > 1:
-        json_parts = [json_parts[0] + "}"] + ["{" + part + "}" for part in json_parts[1:]]
+    
+    decoder = json.JSONDecoder()
+    pos = 0
+    length = len(body_str)
 
-    else:
-        json_parts = [body_str]
-
-    for json_part in json_parts:
-        if not json_part.strip():
-            continue
-
+    while pos < length:
         try:
-            data = json.loads(json_part)
+            data, index = decoder.raw_decode(body_str[pos:])
         except json.JSONDecodeError as e:
             print(f"Erro ao decodificar um dos JSONs: {e}")
-            continue
-        
+            break
+
+        pos += index
+
         channel = data.get("channel", {})
         nome_canal = channel.get("name")
         latitude = parse_float(channel.get("latitude"))
@@ -68,6 +65,7 @@ async def receber_dado(request: Request):
             ]:
                 print("Feed ignorado por dados inválidos:", feed)
                 continue
+
             cursor.execute("""
                 INSERT INTO leituras_iot (
                     created_at,
